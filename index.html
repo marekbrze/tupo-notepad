@@ -8,7 +8,7 @@
   :root {
     --bg: #f6f5f1; --panel: #fff; --ink: #1d1d1f; --muted: #6b6b70; --line: #c9c7c0;
     --sel: #2563eb; --bad: #dc2626;
-    --c0: #e53935; --c1: #1e88e5; --c2: #43a047; --c3: #fdd835; --c4: #8e24aa;
+    --c0: #e53935; --c1: #43a047; --c2: #1e88e5; --c3: #fdd835; --c4: #8e24aa;
     --c5: #fb8c00; --c6: #00acc1; --c7: #6d4c41; --c8: #ec407a;
   }
   @media (prefers-color-scheme: dark) {
@@ -26,6 +26,11 @@
   #grid { display: grid; gap: 3px; background: var(--line); border: 3px solid var(--line); border-radius: 8px; margin-bottom: 14px; touch-action: manipulation; }
   .cell { position: relative; aspect-ratio: 1; background: var(--panel); cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .cell.sel { outline: 3px solid var(--sel); outline-offset: -3px; z-index: 1; }
+  .cell.given { background: color-mix(in srgb, var(--panel) 85%, var(--muted)); }
+  .cell.given::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+  table.m { border-collapse: collapse; font-size: .85rem; }
+  table.m td, table.m th { border: 1px solid var(--line); width: 34px; height: 30px; text-align: center; padding: 0; }
+  table.m td.used { background: var(--sel); color: #fff; }
   .cell.bad { box-shadow: inset 0 0 0 3px var(--bad); }
   .final { font-weight: 700; font-size: clamp(1.2rem, 7vw, 2.4rem); line-height: 1; }
   .final.colored { width: 70%; height: 70%; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.7); }
@@ -67,9 +72,10 @@
     </div>
     <div class="row"><span class="t">Cyfry</span><span id="digits" class="row"></span></div>
     <div class="row"><span class="t">Kolory</span><span id="colors" class="row"></span></div>
-    <div class="row"><button id="clearcell">Wyczyść pole</button></div>
+    <div class="row"><button id="clearcell">Wyczyść pole</button><button id="given" title="Oznacz pole jako dane w łamigłówce">Pole dane ●</button></div>
+    <div class="row"><span class="t">Pary</span><span id="matrix"></span></div>
   </div>
-  <p class="hint">Klik na pole, potem cyfra/kolor. Klawisze: 1–9 cyfry, Q W E R T Y U I O kolory, spacja/Tab = zmiana trybu, strzałki = ruch, Delete = wyczyść pole, Ctrl+Z = cofnij. Czerwona ramka = powtórzenie w wierszu lub kolumnie. Dane zapisują się w przeglądarce.</p>
+  <p class="hint">Klik na pole, potem cyfra/kolor. Klawisze: 1–9 cyfry, Q W E R T Y U I O kolory, spacja/Tab = zmiana trybu, strzałki = ruch, Delete = wyczyść pole, Ctrl+Z = cofnij. Czerwona ramka = powtórzenie cyfry lub koloru w wierszu/kolumnie albo powtórzona para cyfra+kolor (każda para ma wystąpić raz na całej planszy). Tabela „Pary” pokazuje, które pary są już użyte. Dane zapisują się w przeglądarce.</p>
 </main>
 <script>
 const KEY = 'tupo-notepad-v1';
@@ -78,7 +84,7 @@ let st;            // { n, cells:[{d,c,nd:[],nc:[]}], mode, auto }
 let sel = 0, hist = [];
 
 const $ = id => document.getElementById(id);
-const blank = () => ({ d: 0, c: -1, nd: [], nc: [] });
+const blank = () => ({ d: 0, c: -1, nd: [], nc: [], g: false });
 const fresh = n => ({ n, cells: Array.from({ length: n * n }, blank), mode: 'final', auto: true });
 
 function load() {
@@ -86,7 +92,7 @@ function load() {
     const s = JSON.parse(localStorage.getItem(KEY));
     if (s && s.n >= 3 && s.n <= 9 && s.cells.length === s.n * s.n) return s;
   } catch (e) {}
-  return fresh(6);
+  return fresh(4);
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
 function snap() { hist.push(JSON.stringify(st.cells)); if (hist.length > 200) hist.shift(); }
@@ -104,6 +110,9 @@ function conflicts() {
       Object.values(seen).forEach(g => g.length > 1 && g.forEach(i => bad.add(i)));
     }
   };
+  const combo = {};
+  st.cells.forEach((cell, i) => { if (cell.d && cell.c >= 0) (combo[cell.d + ',' + cell.c] = combo[cell.d + ',' + cell.c] || []).push(i); });
+  Object.values(combo).forEach(g => g.length > 1 && g.forEach(i => bad.add(i)));
   for (let k = 0; k < n; k++) {
     scan(Array.from({ length: n }, (_, j) => k * n + j));
     scan(Array.from({ length: n }, (_, j) => j * n + k));
@@ -142,7 +151,7 @@ function render() {
   g.innerHTML = '';
   st.cells.forEach((cell, i) => {
     const el = document.createElement('div');
-    el.className = 'cell' + (i === sel ? ' sel' : '') + (bad.has(i) ? ' bad' : '');
+    el.className = 'cell' + (cell.g ? ' given' : '') + (i === sel ? ' sel' : '') + (bad.has(i) ? ' bad' : '');
     el.setAttribute('role', 'gridcell');
     const hasFinal = cell.d || cell.c >= 0;
     let h = '';
@@ -163,6 +172,14 @@ function render() {
   const cell = st.cells[sel];
   [...$('digits').children].forEach((b, i) => b.classList.toggle('on', st.mode === 'final' ? cell.d === i + 1 : cell.nd.includes(i + 1)));
   [...$('colors').children].forEach((b, i) => b.classList.toggle('on', st.mode === 'final' ? cell.c === i : cell.nc.includes(i)));
+  $('given').setAttribute('aria-pressed', !!cell.g);
+  let m = '<table class="m"><tr><th></th>' + [...Array(n).keys()].map(c => `<th><i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--c${c})"></i></th>`).join('') + '</tr>';
+  for (let d = 1; d <= n; d++) {
+    m += `<tr><th>${d}</th>`;
+    for (let c = 0; c < n; c++) m += `<td class="${st.cells.some(x => x.d === d && x.c === c) ? 'used' : ''}">${st.cells.some(x => x.d === d && x.c === c) ? '✓' : ''}</td>`;
+    m += '</tr>';
+  }
+  $('matrix').innerHTML = m + '</table>';
   save();
 }
 
@@ -188,6 +205,7 @@ $('reset').onclick = () => { if (confirm('Wyczyścić całą planszę?')) { snap
 $('allc').onclick = () => { snap(); const r = [...Array(st.n).keys()]; st.cells.forEach(c => { if (!c.d) c.nd = r.map(x => x + 1); if (c.c < 0) c.nc = [...r]; }); clean(); };
 $('clean').onclick = clean;
 $('clearcell').onclick = () => { snap(); st.cells[sel] = blank(); render(); };
+$('given').onclick = () => { snap(); st.cells[sel].g = !st.cells[sel].g; render(); };
 $('mfinal').onclick = () => { st.mode = 'final'; render(); };
 $('mnote').onclick = () => { st.mode = 'note'; render(); };
 $('auto').onchange = e => { st.auto = e.target.checked; render(); };
