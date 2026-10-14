@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notatnik Tupo</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #fff; --ink: #1d1d1f; --muted: #6b6b70; --line: #c9c7c0;
+    --sel: #2563eb; --bad: #dc2626;
+    --c0: #e53935; --c1: #1e88e5; --c2: #43a047; --c3: #fdd835; --c4: #8e24aa;
+    --c5: #fb8c00; --c6: #00acc1; --c7: #6d4c41; --c8: #ec407a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17171a; --panel: #222226; --ink: #ececf0; --muted: #9a9aa3; --line: #44444c; --sel: #60a5fa; --bad: #f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.2rem; margin: 0 0 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  button, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  button:hover { border-color: var(--sel); }
+  button[aria-pressed="true"] { background: var(--sel); color: #fff; border-color: var(--sel); }
+  label { color: var(--muted); font-size: .9rem; }
+  #grid { display: grid; gap: 3px; background: var(--line); border: 3px solid var(--line); border-radius: 8px; margin-bottom: 14px; touch-action: manipulation; }
+  .cell { position: relative; aspect-ratio: 1; background: var(--panel); cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .cell.sel { outline: 3px solid var(--sel); outline-offset: -3px; z-index: 1; }
+  .cell.bad { box-shadow: inset 0 0 0 3px var(--bad); }
+  .final { font-weight: 700; font-size: clamp(1.2rem, 7vw, 2.4rem); line-height: 1; }
+  .final.colored { width: 70%; height: 70%; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.7); }
+  .final.colored.nodigit { color: transparent; }
+  .final.digitless { color: var(--muted); }
+  .notes { position: absolute; inset: 2px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+  .notes.has-final { opacity: 0; }
+  .nd { display: flex; flex-wrap: wrap; gap: 0 3px; font-size: clamp(.5rem, 2.4vw, .8rem); color: var(--muted); line-height: 1.1; }
+  .nc { display: flex; flex-wrap: wrap; gap: 2px; }
+  .nc i { width: clamp(6px, 1.9vw, 10px); height: clamp(6px, 1.9vw, 10px); border-radius: 50%; display: block; }
+  .final-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .pad { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .row .t { width: 64px; color: var(--muted); font-size: .85rem; }
+  .k { min-width: 42px; height: 42px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; position: relative; }
+  .k.col { color: #fff; text-shadow: 0 0 3px rgba(0,0,0,.7); border-color: transparent; }
+  .k.col small { position: absolute; right: 3px; bottom: 1px; font-size: .6rem; opacity: .85; }
+  .k.on { outline: 3px solid var(--sel); outline-offset: 2px; }
+  .hint { color: var(--muted); font-size: .8rem; margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Notatnik Tupo</h1>
+  <div class="bar">
+    <label>Rozmiar <select id="size"></select></label>
+    <button id="undo">↶ Cofnij</button>
+    <button id="allc">Wszystkie kandydaty</button>
+    <button id="clean" title="Usuń kandydatów sprzecznych z ostatecznymi wartościami w wierszu/kolumnie">Oczyść notatki</button>
+    <button id="reset">Reset</button>
+  </div>
+  <div id="grid" role="grid"></div>
+  <div class="pad">
+    <div class="row">
+      <span class="t">Tryb</span>
+      <button id="mfinal" aria-pressed="true">Ostateczne</button>
+      <button id="mnote" aria-pressed="false">Możliwe (notatki)</button>
+      <label><input type="checkbox" id="auto" checked> auto-usuwaj z wiersza/kolumny</label>
+    </div>
+    <div class="row"><span class="t">Cyfry</span><span id="digits" class="row"></span></div>
+    <div class="row"><span class="t">Kolory</span><span id="colors" class="row"></span></div>
+    <div class="row"><button id="clearcell">Wyczyść pole</button></div>
+  </div>
+  <p class="hint">Klik na pole, potem cyfra/kolor. Klawisze: 1–9 cyfry, Q W E R T Y U I O kolory, spacja/Tab = zmiana trybu, strzałki = ruch, Delete = wyczyść pole, Ctrl+Z = cofnij. Czerwona ramka = powtórzenie w wierszu lub kolumnie. Dane zapisują się w przeglądarce.</p>
+</main>
+<script>
+const KEY = 'tupo-notepad-v1';
+const COLKEYS = 'qwertyuio';
+let st;            // { n, cells:[{d,c,nd:[],nc:[]}], mode, auto }
+let sel = 0, hist = [];
+
+const $ = id => document.getElementById(id);
+const blank = () => ({ d: 0, c: -1, nd: [], nc: [] });
+const fresh = n => ({ n, cells: Array.from({ length: n * n }, blank), mode: 'final', auto: true });
+
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && s.n >= 3 && s.n <= 9 && s.cells.length === s.n * s.n) return s;
+  } catch (e) {}
+  return fresh(6);
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
+function snap() { hist.push(JSON.stringify(st.cells)); if (hist.length > 200) hist.shift(); }
+
+const toggle = (arr, v) => { const i = arr.indexOf(v); i < 0 ? arr.push(v) : arr.splice(i, 1); arr.sort((a, b) => a - b); };
+const rc = i => [Math.floor(i / st.n), i % st.n];
+const peers = i => { const [r, c] = rc(i), out = []; for (let k = 0; k < st.n; k++) { if (k !== c) out.push(r * st.n + k); if (k !== r) out.push(k * st.n + c); } return out; };
+
+function conflicts() {
+  const bad = new Set(), n = st.n;
+  const scan = idxs => {
+    for (const f of ['d', 'c']) {
+      const seen = {};
+      idxs.forEach(i => { const v = st.cells[i][f]; if (v === 0 || v === -1) return; (seen[v] = seen[v] || []).push(i); });
+      Object.values(seen).forEach(g => g.length > 1 && g.forEach(i => bad.add(i)));
+    }
+  };
+  for (let k = 0; k < n; k++) {
+    scan(Array.from({ length: n }, (_, j) => k * n + j));
+    scan(Array.from({ length: n }, (_, j) => j * n + k));
+  }
+  return bad;
+}
+
+function apply(kind, v) {            // kind 'd' | 'c'
+  snap();
+  const cell = st.cells[sel], nk = kind === 'd' ? 'nd' : 'nc', none = kind === 'd' ? 0 : -1;
+  if (st.mode === 'note') {
+    toggle(cell[nk], v);
+  } else {
+    cell[kind] = cell[kind] === v ? none : v;
+    if (cell[kind] !== none) {
+      cell[nk] = [];
+      if (st.auto) peers(sel).forEach(p => { const a = st.cells[p][nk], j = a.indexOf(v); if (j >= 0) a.splice(j, 1); });
+    }
+  }
+  render();
+}
+
+function clean() {
+  snap();
+  st.cells.forEach((cell, i) => peers(i).forEach(p => {
+    const o = st.cells[p];
+    if (o.d) cell.nd = cell.nd.filter(x => x !== o.d);
+    if (o.c >= 0) cell.nc = cell.nc.filter(x => x !== o.c);
+  }));
+  render();
+}
+
+function render() {
+  const n = st.n, g = $('grid'), bad = conflicts();
+  g.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+  g.innerHTML = '';
+  st.cells.forEach((cell, i) => {
+    const el = document.createElement('div');
+    el.className = 'cell' + (i === sel ? ' sel' : '') + (bad.has(i) ? ' bad' : '');
+    el.setAttribute('role', 'gridcell');
+    const hasFinal = cell.d || cell.c >= 0;
+    let h = '';
+    if (hasFinal) {
+      const cls = cell.c >= 0 ? `final colored${cell.d ? '' : ' nodigit'}` : 'final digitless';
+      const bg = cell.c >= 0 ? ` style="background:var(--c${cell.c})"` : '';
+      h += `<div class="final-bg"><div class="${cls}"${bg}>${cell.d || '●'}</div></div>`;
+    }
+    h += `<div class="notes${hasFinal ? ' has-final' : ''}"><div class="nd">${cell.nd.map(d => `<span>${d}</span>`).join('')}</div>` +
+         `<div class="nc">${cell.nc.map(c => `<i style="background:var(--c${c})"></i>`).join('')}</div></div>`;
+    el.innerHTML = h;
+    el.onclick = () => { sel = i; render(); };
+    g.appendChild(el);
+  });
+  $('mfinal').setAttribute('aria-pressed', st.mode === 'final');
+  $('mnote').setAttribute('aria-pressed', st.mode === 'note');
+  $('auto').checked = st.auto;
+  const cell = st.cells[sel];
+  [...$('digits').children].forEach((b, i) => b.classList.toggle('on', st.mode === 'final' ? cell.d === i + 1 : cell.nd.includes(i + 1)));
+  [...$('colors').children].forEach((b, i) => b.classList.toggle('on', st.mode === 'final' ? cell.c === i : cell.nc.includes(i)));
+  save();
+}
+
+function build() {
+  const sz = $('size'); sz.innerHTML = '';
+  for (let k = 3; k <= 9; k++) sz.add(new Option(`${k}×${k}`, k));
+  sz.value = st.n;
+  $('digits').innerHTML = ''; $('colors').innerHTML = '';
+  for (let i = 0; i < st.n; i++) {
+    const d = document.createElement('button'); d.className = 'k'; d.textContent = i + 1;
+    d.onclick = () => apply('d', i + 1); $('digits').appendChild(d);
+    const c = document.createElement('button'); c.className = 'k col'; c.style.background = `var(--c${i})`;
+    c.innerHTML = `<small>${COLKEYS[i].toUpperCase()}</small>`; c.setAttribute('aria-label', `kolor ${i + 1}`);
+    c.onclick = () => apply('c', i); $('colors').appendChild(c);
+  }
+}
+
+function setSize(n) { st = fresh(n); sel = 0; hist = []; build(); render(); }
+
+$('size').onchange = e => { if (st.cells.some(c => c.d || c.c >= 0 || c.nd.length || c.nc.length) && !confirm('Zmiana rozmiaru wyczyści planszę. Kontynuować?')) { e.target.value = st.n; return; } setSize(+e.target.value); };
+$('undo').onclick = () => { if (hist.length) { st.cells = JSON.parse(hist.pop()); render(); } };
+$('reset').onclick = () => { if (confirm('Wyczyścić całą planszę?')) { snap(); st.cells = Array.from({ length: st.n * st.n }, blank); render(); } };
+$('allc').onclick = () => { snap(); const r = [...Array(st.n).keys()]; st.cells.forEach(c => { if (!c.d) c.nd = r.map(x => x + 1); if (c.c < 0) c.nc = [...r]; }); clean(); };
+$('clean').onclick = clean;
+$('clearcell').onclick = () => { snap(); st.cells[sel] = blank(); render(); };
+$('mfinal').onclick = () => { st.mode = 'final'; render(); };
+$('mnote').onclick = () => { st.mode = 'note'; render(); };
+$('auto').onchange = e => { st.auto = e.target.checked; render(); };
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.ctrlKey && e.key !== 'z' || e.metaKey && e.key !== 'z') return;
+  const n = st.n, k = e.key, [r, c] = rc(sel);
+  if ((e.ctrlKey || e.metaKey) && k === 'z') { $('undo').click(); e.preventDefault(); return; }
+  if (/^[1-9]$/.test(k) && +k <= n) apply('d', +k);
+  else if (COLKEYS.indexOf(k.toLowerCase()) >= 0 && COLKEYS.indexOf(k.toLowerCase()) < n) apply('c', COLKEYS.indexOf(k.toLowerCase()));
+  else if (k === ' ' || k === 'Tab') { st.mode = st.mode === 'final' ? 'note' : 'final'; render(); }
+  else if (k === 'Delete' || k === 'Backspace' || k === '0') $('clearcell').click();
+  else if (k === 'ArrowLeft') sel = r * n + (c + n - 1) % n;
+  else if (k === 'ArrowRight') sel = r * n + (c + 1) % n;
+  else if (k === 'ArrowUp') sel = ((r + n - 1) % n) * n + c;
+  else if (k === 'ArrowDown') sel = ((r + 1) % n) * n + c;
+  else return;
+  e.preventDefault(); render();
+});
+
+st = load(); build(); render();
+</script>
+</body>
+</html>
