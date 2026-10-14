@@ -30,6 +30,8 @@
   .cell.given::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
   table.m { border-collapse: collapse; font-size: .85rem; }
   table.m td, table.m th { border: 1px solid var(--line); width: 34px; height: 30px; text-align: center; padding: 0; }
+  table.m td.zero { background: var(--bad); color: #fff; }
+  table.m td.one { font-weight: 700; outline: 2px solid var(--sel); outline-offset: -2px; }
   table.m td.used { background: var(--sel); color: #fff; }
   .cell.bad { box-shadow: inset 0 0 0 3px var(--bad); }
   .final { font-weight: 700; font-size: clamp(1.2rem, 7vw, 2.4rem); line-height: 1; }
@@ -80,7 +82,7 @@
     <div class="row"><button id="clearcell">Wyczyść pole</button><button id="given" title="Oznacz pole jako dane w łamigłówce">Pole dane ●</button></div>
     <div class="row"><span class="t">Pary</span><span id="matrix"></span></div>
   </div>
-  <p class="hint">Klik na pole, potem cyfra/kolor. Klawisze: 1–9 cyfry, Q W E R T Y U I O kolory, spacja/Tab = zmiana trybu, strzałki = ruch, Delete = wyczyść pole, Ctrl+Z = cofnij. Czerwona ramka = powtórzenie cyfry lub koloru w wierszu/kolumnie albo powtórzona para cyfra+kolor (każda para ma wystąpić raz na całej planszy). Tabela „Pary” pokazuje, które pary są już użyte. Dane zapisują się w przeglądarce.</p>
+  <p class="hint">Klik na pole, potem cyfra/kolor. Klawisze: 1–9 cyfry, Q W E R T Y U I O kolory, spacja/Tab = zmiana trybu, strzałki = ruch, Delete = wyczyść pole, Ctrl+Z = cofnij. Czerwona ramka = powtórzenie cyfry lub koloru w wierszu/kolumnie albo powtórzona para cyfra+kolor (każda para ma wystąpić raz na całej planszy). Tabela „Pary” pokazuje ✓ dla użytych par, a dla pozostałych liczbę pól, w których para jeszcze może wystąpić (pole bez notatek liczy się jako „wszystko możliwe”; 1 = ramka, 0 = czerwone). Dane zapisują się w przeglądarce.</p>
 </main>
 <script>
 const KEY = 'tupo-notepad-v1';
@@ -180,7 +182,11 @@ function render() {
   let m = '<table class="m"><tr><th></th>' + [...Array(n).keys()].map(c => `<th><i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--c${c})"></i></th>`).join('') + '</tr>';
   for (let d = 1; d <= n; d++) {
     m += `<tr><th>${d}</th>`;
-    for (let c = 0; c < n; c++) m += `<td class="${st.cells.some(x => x.d === d && x.c === c) ? 'used' : ''}">${st.cells.some(x => x.d === d && x.c === c) ? '✓' : ''}</td>`;
+    for (let c = 0; c < n; c++) {
+      const used = st.cells.some(x => x.d === d && x.c === c);
+      const k = st.cells.filter(x => (x.d ? x.d === d : !x.nd.length || x.nd.includes(d)) && (x.c >= 0 ? x.c === c : !x.nc.length || x.nc.includes(c))).length;
+      m += `<td class="${used ? 'used' : k === 0 ? 'zero' : k === 1 ? 'one' : ''}">${used ? '✓' : k}</td>`;
+    }
     m += '</tr>';
   }
   $('matrix').innerHTML = m + '</table>';
