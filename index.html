@@ -30,6 +30,11 @@
   .cell.given::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
   table.m { border-collapse: collapse; font-size: .85rem; }
   table.m td, table.m th { border: 1px solid var(--line); width: 34px; height: 30px; text-align: center; padding: 0; }
+  .cell.hl { background: color-mix(in srgb, var(--panel) 70%, #22c55e); }
+  .cell.hlf { background: color-mix(in srgb, var(--panel) 45%, #22c55e); }
+  table.m td { cursor: pointer; }
+  table.m td.hsel { box-shadow: inset 0 0 0 3px var(--ink); }
+  .k.h { min-width: 34px; height: 34px; }
   table.m td.zero { background: var(--bad); color: #fff; }
   table.m td.one { font-weight: 700; outline: 2px solid var(--sel); outline-offset: -2px; }
   table.m td.used { background: var(--sel); color: #fff; }
@@ -80,15 +85,17 @@
     <div class="row"><span class="t">Cyfry</span><span id="digits" class="row"></span></div>
     <div class="row"><span class="t">Kolory</span><span id="colors" class="row"></span></div>
     <div class="row"><button id="clearcell">Wyczyść pole</button><button id="given" title="Oznacz pole jako dane w łamigłówce">Pole dane ●</button></div>
+    <div class="row"><span class="t">Pokaż</span><span id="hd" class="row"></span><span id="hc" class="row"></span><button id="hclear">✕</button></div>
     <div class="row"><span class="t">Pary</span><span id="matrix"></span></div>
   </div>
-  <p class="hint">Klik na pole, potem cyfra/kolor. Klawisze: 1–9 cyfry, Q W E R T Y U I O kolory, spacja/Tab = zmiana trybu, strzałki = ruch, Delete = wyczyść pole, Ctrl+Z = cofnij. Czerwona ramka = powtórzenie cyfry lub koloru w wierszu/kolumnie albo powtórzona para cyfra+kolor (każda para ma wystąpić raz na całej planszy). Tabela „Pary” pokazuje ✓ dla użytych par, a dla pozostałych liczbę pól, w których para jeszcze może wystąpić (pole bez notatek liczy się jako „wszystko możliwe”; 1 = ramka, 0 = czerwone). Dane zapisują się w przeglądarce.</p>
+  <p class="hint">Klik na pole, potem cyfra/kolor. „Pokaż”: wybierz cyfrę, kolor albo oba (lub kliknij parę w tabeli), a zielone pola pokażą, gdzie można je wstawić (ciemniejsze = już tam wstawione). Klawisze: 1–9 cyfry, Q W E R T Y U I O kolory, spacja/Tab = zmiana trybu, strzałki = ruch, Delete = wyczyść pole, Ctrl+Z = cofnij. Czerwona ramka = powtórzenie cyfry lub koloru w wierszu/kolumnie albo powtórzona para cyfra+kolor (każda para ma wystąpić raz na całej planszy). Tabela „Pary” pokazuje ✓ dla użytych par, a dla pozostałych liczbę pól, w których para jeszcze może wystąpić (pole bez notatek liczy się jako „wszystko możliwe”; 1 = ramka, 0 = czerwone). Dane zapisują się w przeglądarce.</p>
 </main>
 <script>
 const KEY = 'tupo-notepad-v1';
 const COLKEYS = 'qwertyuio';
 let st;            // { n, cells:[{d,c,nd:[],nc:[]}], mode, auto }
-let sel = 0, hist = [];
+let sel = 0, hist = [], hl = { d: 0, c: -1 };
+const can = (x, d, c) => (!d || (x.d ? x.d === d : !x.nd.length || x.nd.includes(d))) && (c < 0 || (x.c >= 0 ? x.c === c : !x.nc.length || x.nc.includes(c)));
 
 const $ = id => document.getElementById(id);
 const blank = () => ({ d: 0, c: -1, nd: [], nc: [], g: false });
@@ -158,7 +165,7 @@ function render() {
   g.innerHTML = '';
   st.cells.forEach((cell, i) => {
     const el = document.createElement('div');
-    el.className = 'cell' + (cell.g ? ' given' : '') + (i === sel ? ' sel' : '') + (bad.has(i) ? ' bad' : '');
+    el.className = 'cell' + ((hl.d || hl.c >= 0) && can(cell, hl.d, hl.c) ? ((!hl.d || cell.d === hl.d) && (hl.c < 0 || cell.c === hl.c) ? ' hlf' : ' hl') : '') + (cell.g ? ' given' : '') + (i === sel ? ' sel' : '') + (bad.has(i) ? ' bad' : '');
     el.setAttribute('role', 'gridcell');
     const hasFinal = cell.d || cell.c >= 0;
     let h = '';
@@ -178,14 +185,16 @@ function render() {
   const cell = st.cells[sel];
   [...$('digits').children].forEach((b, i) => b.classList.toggle('on', st.mode === 'final' ? cell.d === i + 1 : cell.nd.includes(i + 1)));
   [...$('colors').children].forEach((b, i) => b.classList.toggle('on', st.mode === 'final' ? cell.c === i : cell.nc.includes(i)));
+  [...$('hd').children].forEach((b, i) => b.classList.toggle('on', hl.d === i + 1));
+  [...$('hc').children].forEach((b, i) => b.classList.toggle('on', hl.c === i));
   $('given').setAttribute('aria-pressed', !!cell.g);
   let m = '<table class="m"><tr><th></th>' + [...Array(n).keys()].map(c => `<th><i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--c${c})"></i></th>`).join('') + '</tr>';
   for (let d = 1; d <= n; d++) {
     m += `<tr><th>${d}</th>`;
     for (let c = 0; c < n; c++) {
       const used = st.cells.some(x => x.d === d && x.c === c);
-      const k = st.cells.filter(x => (x.d ? x.d === d : !x.nd.length || x.nd.includes(d)) && (x.c >= 0 ? x.c === c : !x.nc.length || x.nc.includes(c))).length;
-      m += `<td class="${used ? 'used' : k === 0 ? 'zero' : k === 1 ? 'one' : ''}">${used ? '✓' : k}</td>`;
+      const k = st.cells.filter(x => can(x, d, c)).length;
+      m += `<td data-d="${d}" data-c="${c}" class="${hl.d === d && hl.c === c ? 'hsel ' : ''}${used ? 'used' : k === 0 ? 'zero' : k === 1 ? 'one' : ''}">${used ? '✓' : k}</td>`;
     }
     m += '</tr>';
   }
@@ -198,6 +207,14 @@ function build() {
   for (let k = 3; k <= 5; k++) sz.add(new Option(`${k}×${k}`, k));
   sz.value = st.n;
   $('digits').innerHTML = ''; $('colors').innerHTML = '';
+  $('hd').innerHTML = ''; $('hc').innerHTML = '';
+  for (let i = 0; i < st.n; i++) {
+    const a = document.createElement('button'); a.className = 'k h'; a.textContent = i + 1;
+    a.onclick = () => { hl.d = hl.d === i + 1 ? 0 : i + 1; render(); }; $('hd').appendChild(a);
+    const b = document.createElement('button'); b.className = 'k h col'; b.style.background = `var(--c${i})`;
+    b.setAttribute('aria-label', `pokaż kolor ${i + 1}`);
+    b.onclick = () => { hl.c = hl.c === i ? -1 : i; render(); }; $('hc').appendChild(b);
+  }
   for (let i = 0; i < st.n; i++) {
     const d = document.createElement('button'); d.className = 'k'; d.textContent = i + 1;
     d.onclick = () => apply('d', i + 1); $('digits').appendChild(d);
@@ -207,13 +224,15 @@ function build() {
   }
 }
 
-function setSize(n) { st = fresh(n); sel = 0; hist = []; build(); render(); }
+function setSize(n) { hl = { d: 0, c: -1 }; st = fresh(n); sel = 0; hist = []; build(); render(); }
 
 $('size').onchange = e => { if (st.cells.some(c => c.d || c.c >= 0 || c.nd.length || c.nc.length) && !confirm('Zmiana rozmiaru wyczyści planszę. Kontynuować?')) { e.target.value = st.n; return; } setSize(+e.target.value); };
 $('undo').onclick = () => { if (hist.length) { st.cells = JSON.parse(hist.pop()); render(); } };
 $('reset').onclick = () => { if (confirm('Wyczyścić całą planszę?')) { snap(); st.cells = Array.from({ length: st.n * st.n }, blank); render(); } };
 $('allc').onclick = () => { snap(); const r = [...Array(st.n).keys()]; st.cells.forEach(c => { if (!c.d) c.nd = r.map(x => x + 1); if (c.c < 0) c.nc = [...r]; }); clean(); };
 $('clean').onclick = clean;
+$('hclear').onclick = () => { hl = { d: 0, c: -1 }; render(); };
+$('matrix').onclick = e => { const t = e.target.closest('td'); if (!t) return; const d = +t.dataset.d, c = +t.dataset.c; hl = hl.d === d && hl.c === c ? { d: 0, c: -1 } : { d, c }; render(); };
 $('clearcell').onclick = () => { snap(); st.cells[sel] = blank(); render(); };
 $('given').onclick = () => { snap(); st.cells[sel].g = !st.cells[sel].g; render(); };
 $('mfinal').onclick = () => { st.mode = 'final'; render(); };
