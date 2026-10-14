@@ -8,7 +8,7 @@
   :root {
     --bg: #f6f5f1; --panel: #fff; --ink: #1d1d1f; --muted: #6b6b70; --line: #c9c7c0;
     --sel: #2563eb; --bad: #dc2626;
-    --c0: #e53935; --c1: #43a047; --c2: #1e88e5; --c3: #fdd835; --c4: #8e24aa;
+    --c0: #e53935; --c1: #43a047; --c2: #1e88e5; --c3: #fdd835; --c4: #8e24aa; /* fioletowy */
     --c5: #fb8c00; --c6: #00acc1; --c7: #6d4c41; --c8: #ec407a;
   }
   @media (prefers-color-scheme: dark) {
@@ -90,7 +90,7 @@ const fresh = n => ({ n, cells: Array.from({ length: n * n }, blank), mode: 'fin
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && s.n >= 3 && s.n <= 9 && s.cells.length === s.n * s.n) return s;
+    if (s && s.n >= 3 && s.n <= 5 && s.cells.length === s.n * s.n) return s;
   } catch (e) {}
   return fresh(4);
 }
@@ -185,7 +185,7 @@ function render() {
 
 function build() {
   const sz = $('size'); sz.innerHTML = '';
-  for (let k = 3; k <= 9; k++) sz.add(new Option(`${k}×${k}`, k));
+  for (let k = 3; k <= 5; k++) sz.add(new Option(`${k}×${k}`, k));
   sz.value = st.n;
   $('digits').innerHTML = ''; $('colors').innerHTML = '';
   for (let i = 0; i < st.n; i++) {
